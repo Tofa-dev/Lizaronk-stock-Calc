@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Frozen Food Sales Calculator</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: rgb(183, 216, 183);
+    margin: 0;
+    padding: 16px;
+    color: #222;
+  }
+  .container {
+    max-width: 700px;
+    margin: 0 auto;
+    background: rgb(170, 132, 118);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  p.subtitle {
+    font-size: 14px;
+    color: #666;
+    margin: 0 0 20px;
+  }
+  #upload-area {
+    border: 2px double black;
+    border-radius: 10px;
+    padding: 32px 16px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+    background-color: rgb(174, 113, 123);
+  }
+  #upload-area:hover, #upload-area.dragover {
+    border-color: #888;
+    background: rgb(153, 153, 190);
+  }
+  #upload-area p {
+    margin: 8px 0 0;
+    font-size: 15px;
+  }
+  #upload-area p.small {
+    font-size: 13px;
+    color: #888;
+  }
+  #file-input { display: none; }
+  #result-area { display: none; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: #f5f5f3;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .card .label {
+    font-size: 13px;
+    color: #777;
+    margin: 0 0 4px;
+  }
+  .card .value {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  button {
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+    
+  }
+  button:hover { background: #f5f5f3; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+  }
+  th {
+    color: #777;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  td.value, th.value { text-align: right; }
+  #error-area {
+    display: none;
+    color: #c0392b;
+    font-size: 14px;
+    margin-top: 10px;
+    background: #fdecea;
+    padding: 10px 14px;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Frozen Food Sales Calculator</h1>
+  <p class="subtitle">Upload your Mira POS sales export (CSV) to get total sales per item, converted to kg.</p>
+
+  <div id="upload-area">
+    <div style="font-size: 28px;">⬆️</div>
+    <p>Tap to choose your Mira POS CSV file</p>
+    <p class="small">or drag and drop it here</p>
+    <input type="file" id="file-input" accept=".csv" />
+  </div>
+
+  <div id="result-area">
+    <div class="cards" id="summary-cards"></div>
+
+    <div class="actions">
+      <button id="copy-btn">📋 Copy table</button>
+      <button id="reset-btn">🔄 Upload another file</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table id="results-table"></table>
+    </div>
+  </div>
+
+  <div id="error-area"></div>
+</div>
+
+<script>
+const TEN_KG_ITEMS = ['rock','hake','owere','tilapia','turkey','blanket','laps','orobo','wings','chest','full chicken','n. chicken','n chicken','fingers','turkey gizzard','chicken gizzard'];
+
+function getCartonKg(itemName) {
+  const lower = itemName.toLowerCase();
+  for (const key of TEN_KG_ITEMS) {
+    if (lower.includes(key)) return 10;
+  }
+  return 20;
+}
+
+function getBaseProductName(fullName) {
+  const dashIndex = fullName.indexOf(' - ');
+  let base = dashIndex >= 0 ? fullName.substring(0, dashIndex).trim() : fullName.trim();
+  // Strip trailing unit-group suffixes (ct, kilo, ksf, kg, carton) so variants merge into one item
+  base = base.replace(/\s+(ct|carton|kilo|kg|ksf)$/i, '').trim();
+  return base;
+}
+
+function parseUnitToKg(fullName, quantity) {
+  const dashIndex = fullName.indexOf(' - ');
+  const unitPart = dashIndex >= 0 ? fullName.substring(dashIndex + 3).trim().toLowerCase() : '';
+  const baseName = getBaseProductName(fullName);
+  const lowerBase = baseName.toLowerCase();
+
+  if (lowerBase.includes('sausage')) {
+    return { kg: null, pieces: quantity };
+  }
+
+  const cartonKg = getCartonKg(baseName);
+  let kg = 0;
+
+  if (unitPart.includes('ct') || unitPart.includes('carton')) {
+    if (unitPart.includes('1/8')) kg = cartonKg / 8;
+    else if (unitPart.includes('1/4')) kg = cartonKg / 4;
+    else if (unitPart.includes('1/2')) kg = cartonKg / 2;
+    else kg = cartonKg;
+  } else if (unitPart.includes('kilo') || unitPart.includes('kg')) {
+    if (unitPart.includes('point')) {
+      const m = unitPart.match(/(\d+)\s*point/);
+      const n = m ? parseInt(m[1]) : 1;
+      kg = n * 0.05;
+    } else if (unitPart.includes('1/2')) kg = 0.5;
+    else if (unitPart.includes('1/4')) kg = 0.25;
+    else if (unitPart.includes('1/8')) kg = 0.125;
+    else kg = 1;
+  } else if (unitPart.includes('point')) {
+    const m = unitPart.match(/(\d+)\s*point/);
+    const n = m ? parseInt(m[1]) : 1;
+    kg = n * 0.05;
+  } else {
+    kg = 1;
+  }
+
+  return { kg: kg * quantity, pieces: null };
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const items = {};
+  let inItemsSection = false;
+  let headerSkipped = false;
+
+  for (const line of lines) {
+    if (line.toLowerCase().startsWith('name,quantity')) {
+      inItemsSection = true;
+      headerSkipped = true;
+      continue;
+    }
+    if (line.toLowerCase().startsWith('payment method')) {
+      inItemsSection = false;
+      continue;
+    }
+    if (!inItemsSection || !headerSkipped) continue;
+
+    const lastComma = line.lastIndexOf(',');
+    if (lastComma === -1) continue;
+    const name = line.substring(0, lastComma).trim();
+    const qty = parseFloat(line.substring(lastComma + 1).trim());
+    if (!name || isNaN(qty)) continue;
+
+    const baseName = getBaseProductName(name);
+    const parsed = parseUnitToKg(name, qty);
+
+    if (!items[baseName]) items[baseName] = { kg: 0, pieces: 0 };
+
+    if (parsed.kg !== null) items[baseName].kg += parsed.kg;
+    else items[baseName].pieces += parsed.pieces;
+  }
+
+  return items;
+}
+
+function render(items) {
+  const errorArea = document.getElementById('error-area');
+  const resultArea = document.getElementById('result-area');
+  const summaryCards = document.getElementById('summary-cards');
+  const table = document.getElementById('results-table');
+
+  const names = Object.keys(items).sort();
+  if (names.length === 0) {
+    errorArea.textContent = 'Could not find any item rows in this file. Please check the file format.';
+    errorArea.style.display = 'block';
+    return;
+  }
+  errorArea.style.display = 'none';
+
+  let totalKg = 0, totalPieces = 0, itemCount = 0;
+  names.forEach(n => {
+    if (items[n].kg > 0) { totalKg += items[n].kg; itemCount++; }
+    if (items[n].pieces > 0) { totalPieces += items[n].pieces; itemCount++; }
+  });
+
+  summaryCards.innerHTML = `
+    <div class="card"><p class="label">Total weight</p><p class="value">${totalKg.toFixed(2)} kg</p></div>
+    <div class="card"><p class="label">Sausage (pieces)</p><p class="value">${totalPieces}</p></div>
+    <div class="card"><p class="label">Items sold</p><p class="value">${itemCount}</p></div>
+  `;
+
+  let rows = '<tr><th>Item</th><th class="value">Total</th></tr>';
+  names.forEach(n => {
+    const d = items[n];
+    let valueStr = '';
+    if (d.kg > 0) valueStr = d.kg.toFixed(2) + ' kg';
+    if (d.pieces > 0) valueStr += (valueStr ? ' + ' : '') + d.pieces + ' pcs';
+    if (!valueStr) return;
+    rows += `<tr><td>${n}</td><td class="value">${valueStr}</td></tr>`;
+  });
+  table.innerHTML = rows;
+
+  resultArea.style.display = 'block';
+  document.getElementById('upload-area').style.display = 'none';
+
+  window._lastItems = items;
+  window._lastNames = names;
+}
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      render(parseCSV(e.target.result));
+    } catch (err) {
+      const errorArea = document.getElementById('error-area');
+      errorArea.textContent = 'Error reading file: ' + err.message;
+      errorArea.style.display = 'block';
+    }
+  };
+  reader.readAsText(file);
+}
+
+const uploadArea = document.getElementById('upload-area');
+const fileInput = document.getElementById('file-input');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) handleFile(e.target.files[0]);
+});
+uploadArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadArea.classList.add('dragover');
+});
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  document.getElementById('result-area').style.display = 'none';
+  document.getElementById('upload-area').style.display = 'block';
+  fileInput.value = '';
+});
+
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const names = window._lastNames || [];
+  const items = window._lastItems || {};
+  let text = 'Item\tTotal\n';
+  names.forEach(n => {
+    const d = items[n];
+    let valueStr = '';
+    if (d.kg > 0) valueStr = d.kg.toFixed(2) + ' kg';
+    if (d.pieces > 0) valueStr += (valueStr ? ' + ' : '') + d.pieces + ' pcs';
+    if (!valueStr) return;
+    text += n + '\t' + valueStr + '\n';
+  });
+  navigator.clipboard.writeText(text);
+  const btn = document.getElementById('copy-btn');
+  const original = btn.innerHTML;
+  btn.innerHTML = '✅ Copied!';
+  setTimeout(() => { btn.innerHTML = original; }, 1500);
+});
+</script>
+</body>
+</html>
