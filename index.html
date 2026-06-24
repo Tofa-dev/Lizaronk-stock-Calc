@@ -8,50 +8,33 @@
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: rgb(183, 216, 183);
+    background: #3a8559;
     margin: 0;
     padding: 16px;
-    color: #222;
+    color: #0a0909;
   }
   .container {
     max-width: 700px;
     margin: 0 auto;
-    background: rgb(170, 132, 118);
+    background: orangered;
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }
-  h1 {
-    font-size: 20px;
-    margin: 0 0 4px;
-  }
-  p.subtitle {
-    font-size: 14px;
-    color: #666;
-    margin: 0 0 20px;
-  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.subtitle { font-size: 14px; color: #090909; margin: 0 0 20px; }
   #upload-area {
-    border: 2px double black;
+    border: 2px dashed #ccc;
     border-radius: 10px;
     padding: 32px 16px;
     text-align: center;
     cursor: pointer;
     margin-bottom: 20px;
     transition: border-color 0.2s;
-    background-color: rgb(174, 113, 123);
   }
-  #upload-area:hover, #upload-area.dragover {
-    border-color: #888;
-    background: rgb(153, 153, 190);
-  }
-  #upload-area p {
-    margin: 8px 0 0;
-    font-size: 15px;
-  }
-  #upload-area p.small {
-    font-size: 13px;
-    color: #888;
-  }
+  #upload-area:hover, #upload-area.dragover { border-color: #888; background: #fafafa; }
+  #upload-area p { margin: 8px 0 0; font-size: 15px; }
+  #upload-area p.small { font-size: 13px; color: #0a0a0a; }
   #file-input { display: none; }
   #result-area { display: none; }
   .cards {
@@ -60,67 +43,22 @@
     gap: 12px;
     margin-bottom: 20px;
   }
-  .card {
-    background: #f5f5f3;
-    border-radius: 8px;
-    padding: 14px;
-  }
-  .card .label {
-    font-size: 13px;
-    color: #777;
-    margin: 0 0 4px;
-  }
-  .card .value {
-    font-size: 22px;
-    font-weight: 600;
-    margin: 0;
-  }
-  .actions {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-  button {
-    font-size: 14px;
-    padding: 8px 14px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    background: #fff;
-    cursor: pointer;
-    
-  }
+  .card { background: #f5f5f3; border-radius: 8px; padding: 14px; }
+  .card .label { font-size: 13px; color: #777; margin: 0 0 4px; }
+  .card .value { font-size: 22px; font-weight: 600; margin: 0; }
+  .actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  button { font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
   button:hover { background: #f5f5f3; }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-  }
-  th, td {
-    text-align: left;
-    padding: 8px 10px;
-    border-bottom: 1px solid #eee;
-  }
-  th {
-    color: #777;
-    font-weight: 600;
-    font-size: 13px;
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
+  th { color: #777; font-weight: 600; font-size: 13px; }
   td.value, th.value { text-align: right; }
-  #error-area {
-    display: none;
-    color: #c0392b;
-    font-size: 14px;
-    margin-top: 10px;
-    background: #fdecea;
-    padding: 10px 14px;
-    border-radius: 8px;
-  }
+  #error-area { display: none; color: #c0392b; font-size: 14px; margin-top: 10px; background: #fdecea; padding: 10px 14px; border-radius: 8px; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Frozen Food Sales Calculator</h1>
+  <h1>Lizaronk Frozen Food Stock Calculator</h1>
   <p class="subtitle">Upload your Mira POS sales export (CSV) to get total sales per item, converted to kg.</p>
 
   <div id="upload-area">
@@ -132,12 +70,11 @@
 
   <div id="result-area">
     <div class="cards" id="summary-cards"></div>
-
     <div class="actions">
       <button id="copy-btn">📋 Copy table</button>
+      <button id="export-btn">⬇️ Download as CSV</button>
       <button id="reset-btn">🔄 Upload another file</button>
     </div>
-
     <div style="overflow-x: auto;">
       <table id="results-table"></table>
     </div>
@@ -147,60 +84,106 @@
 </div>
 
 <script>
-const TEN_KG_ITEMS = ['rock','hake','owere','tilapia','turkey','blanket','laps','orobo','wings','chest','full chicken','n. chicken','n chicken','fingers','turkey gizzard','chicken gizzard'];
+// Items where 1 full carton = 10kg (everything else = 20kg)
+const TEN_KG_ITEMS = [
+  'rock','hake','owere','tilapia','turkey','blanket','laps','orobo',
+  'wings','chest','full chicken','n. chicken','n chicken','fingers',
+  'turkey gizzard','chicken gizzard','fryer','drumstick'
+];
 
-function getCartonKg(itemName) {
-  const lower = itemName.toLowerCase();
+const FIFTEEN_KG_ITEMS = [
+    'yellow tail'
+];
+
+// Explicit merge rules — any base name matching the pattern maps to one canonical name.
+// Order matters: more specific patterns first.
+const MERGE_RULES = [
+  { pattern: /^panla/i,           canonical: 'Panla'           },
+  { pattern: /^mullet/i,          canonical: 'Mullet'          },
+  { pattern: /^rock/i,            canonical: 'Rock'            },
+  { pattern: /^titus/i,           canonical: 'Titus'           },
+  { pattern: /^hake/i,            canonical: 'Hake'            },
+  { pattern: /^kote/i,            canonical: 'Kote'            },
+  { pattern: /^shawa/i,           canonical: 'Shawa'           },
+  { pattern: /^sausage/i,         canonical: 'Sausage'         },
+  { pattern: /^croaker/i,         canonical: 'Croaker'         },
+  { pattern: /^tilapia/i,         canonical: 'Tilapia'         },
+  { pattern: /^turkey gizzard/i,  canonical: 'Turkey Gizzard'  },
+  { pattern: /^turkey/i,          canonical: 'Turkey'          },
+  { pattern: /^chicken gizzard/i, canonical: 'Chicken Gizzard' },
+  { pattern: /^n\.?\s*chicken/i,  canonical: 'N. Chicken'      },
+  { pattern: /^full chicken/i,    canonical: 'Full Chicken'    },
+  { pattern: /^drumstick/i,       canonical: 'Drumstick'       },
+  { pattern: /^fryer/i,           canonical: 'Fryer'           },
+  { pattern: /^wings/i,           canonical: 'Wings'           },
+  { pattern: /^laps/i,            canonical: 'Laps'            },
+  { pattern: /^orobo/i,           canonical: 'Orobo'           },
+  { pattern: /^owere/i,           canonical: 'Owere'           },
+  { pattern: /^chest/i,           canonical: 'Chest'           },
+  { pattern: /^blanket/i,         canonical: 'Blanket'         },
+  { pattern: /^fingers/i,         canonical: 'Fingers'         },
+  { pattern: /^yellow tail/i,     canonical: 'Yellow Tail'     },
+  { pattern: /^yellow/i,          canonical: 'Yellow Tail'     },
+];
+
+function getCartonKg(canonical) {
+  const lower = canonical.toLowerCase();
   for (const key of TEN_KG_ITEMS) {
     if (lower.includes(key)) return 10;
   }
   return 20;
 }
 
-function getBaseProductName(fullName) {
-  const dashIndex = fullName.indexOf(' - ');
-  let base = dashIndex >= 0 ? fullName.substring(0, dashIndex).trim() : fullName.trim();
-  // Strip trailing unit-group suffixes (ct, kilo, ksf, kg, carton) so variants merge into one item
-  base = base.replace(/\s+(ct|carton|kilo|kg|ksf)$/i, '').trim();
-  return base;
-}
+function getCanonicalName(rawBase) {
+  const trimmed = rawBase.trim();
 
-function parseUnitToKg(fullName, quantity) {
-  const dashIndex = fullName.indexOf(' - ');
-  const unitPart = dashIndex >= 0 ? fullName.substring(dashIndex + 3).trim().toLowerCase() : '';
-  const baseName = getBaseProductName(fullName);
-  const lowerBase = baseName.toLowerCase();
-
-  if (lowerBase.includes('sausage')) {
-    return { kg: null, pieces: quantity };
+  // Try explicit merge rules first — catches sesede, box, sq, carton variants etc.
+  for (const rule of MERGE_RULES) {
+    if (rule.pattern.test(trimmed)) return rule.canonical;
   }
 
-  const cartonKg = getCartonKg(baseName);
+  // Fallback: strip trailing unit/size words then title-case
+  let name = trimmed;
+  name = name.replace(/\s+(ct|kilo|kg|ksf|carton)$/i, '').trim();
+  name = name.replace(/\s+\d+kg$/i, '').trim();
+  name = name.replace(/\s+\d+-\d+$/, '').trim();
+  name = name.replace(/\b\w/g, c => c.toUpperCase());
+  return name;
+}
+
+function parseUnitToKg(fullItemName, quantity) {
+  const dashIndex = fullItemName.indexOf(' - ');
+  const rawBase = dashIndex >= 0 ? fullItemName.substring(0, dashIndex) : fullItemName;
+  const unitPart = dashIndex >= 0 ? fullItemName.substring(dashIndex + 3).trim().toLowerCase() : '';
+
+  const canonical = getCanonicalName(rawBase);
+
+  // Sausage = pieces only
+  if (canonical === 'Sausage') {
+    return { canonical, kg: null, pieces: quantity };
+  }
+
+  const cartonKg = getCartonKg(canonical);
   let kg = 0;
 
   if (unitPart.includes('ct') || unitPart.includes('carton')) {
-    if (unitPart.includes('1/8')) kg = cartonKg / 8;
+    if (unitPart.includes('1/8'))      kg = cartonKg / 8;
     else if (unitPart.includes('1/4')) kg = cartonKg / 4;
     else if (unitPart.includes('1/2')) kg = cartonKg / 2;
-    else kg = cartonKg;
+    else                               kg = cartonKg;
   } else if (unitPart.includes('kilo') || unitPart.includes('kg')) {
-    if (unitPart.includes('point')) {
-      const m = unitPart.match(/(\d+)\s*point/);
-      const n = m ? parseInt(m[1]) : 1;
-      kg = n * 0.05;
-    } else if (unitPart.includes('1/2')) kg = 0.5;
+    if (unitPart.includes('1/2'))      kg = 0.5;
     else if (unitPart.includes('1/4')) kg = 0.25;
     else if (unitPart.includes('1/8')) kg = 0.125;
-    else kg = 1;
+    else                               kg = 1;
   } else if (unitPart.includes('point')) {
     const m = unitPart.match(/(\d+)\s*point/);
-    const n = m ? parseInt(m[1]) : 1;
-    kg = n * 0.05;
+    kg = (m ? parseInt(m[1]) : 1) * 0.05;
   } else {
     kg = 1;
   }
 
-  return { kg: kg * quantity, pieces: null };
+  return { canonical, kg: kg * quantity, pieces: null };
 }
 
 function parseCSV(text) {
@@ -227,13 +210,12 @@ function parseCSV(text) {
     const qty = parseFloat(line.substring(lastComma + 1).trim());
     if (!name || isNaN(qty)) continue;
 
-    const baseName = getBaseProductName(name);
     const parsed = parseUnitToKg(name, qty);
+    const key = parsed.canonical;
 
-    if (!items[baseName]) items[baseName] = { kg: 0, pieces: 0 };
-
-    if (parsed.kg !== null) items[baseName].kg += parsed.kg;
-    else items[baseName].pieces += parsed.pieces;
+    if (!items[key]) items[key] = { kg: 0, pieces: 0 };
+    if (parsed.kg !== null) items[key].kg += parsed.kg;
+    else items[key].pieces += parsed.pieces;
   }
 
   return items;
@@ -247,7 +229,7 @@ function render(items) {
 
   const names = Object.keys(items).sort();
   if (names.length === 0) {
-    errorArea.textContent = 'Could not find any item rows in this file. Please check the file format.';
+    errorArea.textContent = 'Could not find any item rows. Please check the file format.';
     errorArea.style.display = 'block';
     return;
   }
@@ -260,7 +242,7 @@ function render(items) {
   });
 
   summaryCards.innerHTML = `
-    <div class="card"><p class="label">Total weight</p><p class="value">${totalKg.toFixed(2)} kg</p></div>
+    <div class="card"><p class="label">Total weight sold</p><p class="value">${totalKg.toFixed(2)} kg</p></div>
     <div class="card"><p class="label">Sausage (pieces)</p><p class="value">${totalPieces}</p></div>
     <div class="card"><p class="label">Items sold</p><p class="value">${itemCount}</p></div>
   `;
@@ -286,9 +268,8 @@ function render(items) {
 function handleFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
-    try {
-      render(parseCSV(e.target.result));
-    } catch (err) {
+    try { render(parseCSV(e.target.result)); }
+    catch (err) {
       const errorArea = document.getElementById('error-area');
       errorArea.textContent = 'Error reading file: ' + err.message;
       errorArea.style.display = 'block';
@@ -301,13 +282,8 @@ const uploadArea = document.getElementById('upload-area');
 const fileInput = document.getElementById('file-input');
 
 uploadArea.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files.length > 0) handleFile(e.target.files[0]);
-});
-uploadArea.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  uploadArea.classList.add('dragover');
-});
+fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
 uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
 uploadArea.addEventListener('drop', (e) => {
   e.preventDefault();
@@ -342,3 +318,29 @@ document.getElementById('copy-btn').addEventListener('click', () => {
 </script>
 </body>
 </html>
+
+<script>
+document.getElementById('export-btn').addEventListener('click', () => {
+  const names = window._lastNames || [];
+  const items = window._lastItems || {};
+
+  // Build CSV content with a header row
+  let csv = 'Item,Total (kg),Pieces\n';
+  names.forEach(n => {
+    const d = items[n];
+    const kg = d.kg > 0 ? d.kg.toFixed(2) : '';
+    const pcs = d.pieces > 0 ? d.pieces : '';
+    if (!kg && !pcs) return;
+    csv += `"${n}",${kg},${pcs}\n`;
+  });
+
+  // Trigger download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'frozen_food_sales.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
