@@ -8,10 +8,10 @@
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #2b9538;
+    background: #046129;
     margin: 0;
     padding: 16px;
-    color: #0b0b0b;
+    color: #0a0909;
   }
   .container {
     max-width: 700px;
@@ -22,7 +22,7 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }
   h1 { font-size: 20px; margin: 0 0 4px; }
-  p.subtitle { font-size: 14px; color: #080808; margin: 0 0 20px; }
+  p.subtitle { font-size: 14px; color: #090808; margin: 0 0 20px; }
   #upload-area {
     border: 2px dashed #ccc;
     border-radius: 10px;
@@ -34,7 +34,7 @@
   }
   #upload-area:hover, #upload-area.dragover { border-color: #888; background: #fafafa; }
   #upload-area p { margin: 8px 0 0; font-size: 15px; }
-  #upload-area p.small { font-size: 13px; color: #080707; }
+  #upload-area p.small { font-size: 13px; color: #040404; }
   #file-input { display: none; }
   #result-area { display: none; }
   .cards {
@@ -44,21 +44,22 @@
     margin-bottom: 20px;
   }
   .card { background: #f5f5f3; border-radius: 8px; padding: 14px; }
-  .card .label { font-size: 13px; color: #777; margin: 0 0 4px; }
+  .card .label { font-size: 13px; color: #070707; margin: 0 0 4px; }
   .card .value { font-size: 22px; font-weight: 600; margin: 0; }
   .actions { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   button { font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
   button:hover { background: #f5f5f3; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
-  th { color: #777; font-weight: 600; font-size: 13px; }
+  th { color: #020101; font-weight: 600; font-size: 13px; }
   td.value, th.value { text-align: right; }
+  tr.zero td { color: #bbb; }
   #error-area { display: none; color: #c0392b; font-size: 14px; margin-top: 10px; background: #fdecea; padding: 10px 14px; border-radius: 8px; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>Lizaronk Frozen Food Stock Calculator</h1>
+  <h1>Frozen Food Sales Calculator</h1>
   <p class="subtitle">Upload your Mira POS sales export (CSV) to get total sales per item, converted to kg.</p>
 
   <div id="upload-area">
@@ -84,48 +85,38 @@
 </div>
 
 <script>
+// ─── FIXED ITEM ORDER ────────────────────────────────────────────────────────
+const FIXED_ITEMS = [
+  'Kote','Titus','Shawa',
+  'Panla Kilo',
+  'Panla Ksf Ct','Panla Africa Ct','Panla Pp Ct','Panla Ward Ct',
+  'Panla 30Kg Ct','Panla Premier Ct','Panla Gb Ct','Panla Sesede Ct',
+  'Ojuyobo','Hake','Rock','Owere','Saithe','Mullet','Haddock',
+  'Tilapia','Croaker','New Item',
+  'Turkey','Blanket','Laps','Orobo','Wings','Chest',
+  'Full Chicken','N. Chicken','Fingers','Turkey Gizzard','Chicken Gizzard',
+  'Mina Sausage','Seara Sausage',
+  'Fillets','Drumstick','Fryer','Heart','Liver',
+];
+
+// Panla ct variants — measured in cartons (ct=1, 1/2ct=0.5, 1/4ct=0.25, 1/8ct=0.125)
+const PANLA_CT_ITEMS = [
+  'panla ksf ct','panla africa ct','panla pp ct','panla ward ct',
+  'panla 30kg ct','panla premier ct','panla gb ct','panla sesede ct',
+];
+
+// Items counted in pieces (not kg or cartons)
+const PIECE_ITEMS = ['mina sausage','seara sausage'];
+
 // Items where 1 full carton = 10kg (everything else = 20kg)
 const TEN_KG_ITEMS = [
   'rock','hake','owere','tilapia','turkey','blanket','laps','orobo',
   'wings','chest','full chicken','n. chicken','n chicken','fingers',
-  'turkey gizzard','chicken gizzard','fryer','drumstick'
+  'turkey gizzard','chicken gizzard','saithe','haddock','ojuyobo',
+  'fillets','heart','liver','drumstick','fryer'
 ];
 
-const FIFTEEN_KG_ITEMS = [
-    'yellow tail'
-];
-
-// Explicit merge rules — any base name matching the pattern maps to one canonical name.
-// Order matters: more specific patterns first.
-const MERGE_RULES = [
-  { pattern: /^panla/i,           canonical: 'Panla'           },
-  { pattern: /^mullet/i,          canonical: 'Mullet'          },
-  { pattern: /^rock/i,            canonical: 'Rock'            },
-  { pattern: /^titus/i,           canonical: 'Titus'           },
-  { pattern: /^hake/i,            canonical: 'Hake'            },
-  { pattern: /^kote/i,            canonical: 'Kote'            },
-  { pattern: /^shawa/i,           canonical: 'Shawa'           },
-  { pattern: /^sausage/i,         canonical: 'Sausage'         },
-  { pattern: /^croaker/i,         canonical: 'Croaker'         },
-  { pattern: /^tilapia/i,         canonical: 'Tilapia'         },
-  { pattern: /^turkey blanket/i,  canonical: 'Turkey Blanket'  },
-  { pattern: /^turkey gizzard/i,  canonical: 'Turkey Gizzard'  },
-  { pattern: /^turkey/i,          canonical: 'Turkey'          },
-  { pattern: /^chicken gizzard/i, canonical: 'Chicken Gizzard' },
-  { pattern: /^n\.?\s*chicken/i,  canonical: 'N. Chicken'      },
-  { pattern: /^full chicken/i,    canonical: 'Full Chicken'    },
-  { pattern: /^drumstick/i,       canonical: 'Drumstick'       },
-  { pattern: /^fryer/i,           canonical: 'Fryer'           },
-  { pattern: /^wings/i,           canonical: 'Wings'           },
-  { pattern: /^laps/i,            canonical: 'Laps'            },
-  { pattern: /^orobo/i,           canonical: 'Orobo'           },
-  { pattern: /^owere/i,           canonical: 'Owere'           },
-  { pattern: /^chest/i,           canonical: 'Chest'           },
-  { pattern: /^blanket/i,         canonical: 'Blanket'         },
-  { pattern: /^fingers/i,         canonical: 'Fingers'         },
-  { pattern: /^yellow tail/i,     canonical: 'Yellow Tail'     },
-  { pattern: /^yellow/i,          canonical: 'Yellow Tail'     },
-];
+const FIFTEEN_KG_ITEMS = ['yellow tail'];
 
 function getCartonKg(canonical) {
   const lower = canonical.toLowerCase();
@@ -136,34 +127,82 @@ function getCartonKg(canonical) {
 }
 
 function getCanonicalName(rawBase) {
-  const trimmed = rawBase.trim();
+  const s = rawBase.trim().toLowerCase();
 
-  // Try explicit merge rules first — catches sesede, box, sq, carton variants etc.
-  for (const rule of MERGE_RULES) {
-    if (rule.pattern.test(trimmed)) return rule.canonical;
+  if (s.startsWith('panla')) {
+    if (s.includes('sesede'))  return 'Panla Sesede Ct';
+    if (s.includes('africa'))  return 'Panla Africa Ct';
+    if (s.includes('premier')) return 'Panla Premier Ct';
+    if (s.includes('ward'))    return 'Panla Ward Ct';
+    if (s.includes('30kg') || s.includes('30 kg')) return 'Panla 30Kg Ct';
+    if (s.includes('gb'))      return 'Panla Gb Ct';
+    if (s.includes('pp'))      return 'Panla Pp Ct';
+    if (s.includes('ksf'))     return 'Panla Ksf Ct';
+    return 'Panla Kilo';
   }
 
-  // Fallback: strip trailing unit/size words then title-case
-  let name = trimmed;
+  if (s.includes('sausage')) {
+    if (s.includes('mina'))  return 'Mina Sausage';
+    if (s.includes('seara') || s.includes('sara')) return 'Seara Sausage';
+    return 'Mina Sausage';
+  }
+
+  if (s.includes('turkey blanket')) return 'Blanket';
+  if (s.includes('turkey gizzard')) return 'Turkey Gizzard';
+  if (s.startsWith('turkey'))       return 'Turkey';
+
+  if (s.includes('chicken gizzard'))  return 'Chicken Gizzard';
+  if (s.startsWith('full chicken'))   return 'Full Chicken';
+  if (s.startsWith('n.') || s.startsWith('n chicken') || s.startsWith('n. chicken')) return 'N. Chicken';
+
+  for (const [stem, name] of [
+    ['kote','Kote'],['titus','Titus'],['shawa','Shawa'],['hake','Hake'],
+    ['rock','Rock'],['owere','Owere'],['saithe','Saithe'],['mullet','Mullet'],
+    ['haddock','Haddock'],['tilapia','Tilapia'],['croaker','Croaker'],
+    ['ojuyobo','Ojuyobo'],['new item','New Item'],['drumstick','Drumstick'],
+    ['fryer','Fryer'],['wings','Wings'],['laps','Laps'],['orobo','Orobo'],
+    ['chest','Chest'],['blanket','Blanket'],['fingers','Fingers'],
+    ['fillets','Fillets'],['heart','Heart'],['liver','Liver'],
+    ['yellow tail','Titus'],['yellow','Titus'],
+  ]) {
+    if (s.startsWith(stem)) return name;
+  }
+
+  let name = rawBase.trim();
   name = name.replace(/\s+(ct|kilo|kg|ksf|carton)$/i, '').trim();
   name = name.replace(/\s+\d+kg$/i, '').trim();
-  name = name.replace(/\s+\d+-\d+$/, '').trim();
   name = name.replace(/\b\w/g, c => c.toUpperCase());
   return name;
 }
 
-function parseUnitToKg(fullItemName, quantity) {
+function parseItem(fullItemName, quantity) {
   const dashIndex = fullItemName.indexOf(' - ');
   const rawBase = dashIndex >= 0 ? fullItemName.substring(0, dashIndex) : fullItemName;
   const unitPart = dashIndex >= 0 ? fullItemName.substring(dashIndex + 3).trim().toLowerCase() : '';
 
   const canonical = getCanonicalName(rawBase);
+  const lowerCanonical = canonical.toLowerCase();
 
-  // Sausage = pieces only
-  if (canonical === 'Sausage') {
-    return { canonical, kg: null, pieces: quantity };
+  // Pieces (sausage brands)
+  if (PIECE_ITEMS.includes(lowerCanonical)) {
+    return { canonical, kg: null, cartons: null, pieces: quantity };
   }
 
+  // Panla ct variants — measured in cartons, not kg
+  if (PANLA_CT_ITEMS.includes(lowerCanonical)) {
+    let ct = 0;
+    if (unitPart.includes('ct') || unitPart.includes('carton')) {
+      if (unitPart.includes('1/8'))      ct = 0.125;
+      else if (unitPart.includes('1/4')) ct = 0.25;
+      else if (unitPart.includes('1/2')) ct = 0.5;
+      else                               ct = 1;
+    } else {
+      ct = 1; // fallback
+    }
+    return { canonical, kg: null, cartons: ct * quantity, pieces: null };
+  }
+
+  // Everything else — convert to kg
   const cartonKg = getCartonKg(canonical);
   let kg = 0;
 
@@ -184,24 +223,25 @@ function parseUnitToKg(fullItemName, quantity) {
     kg = 1;
   }
 
-  return { canonical, kg: kg * quantity, pieces: null };
+  return { canonical, kg: kg * quantity, cartons: null, pieces: null };
 }
 
 function parseCSV(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // Initialise all fixed items at zero
   const items = {};
+  FIXED_ITEMS.forEach(name => { items[name] = { kg: 0, cartons: 0, pieces: 0 }; });
+
   let inItemsSection = false;
   let headerSkipped = false;
 
   for (const line of lines) {
     if (line.toLowerCase().startsWith('name,quantity')) {
-      inItemsSection = true;
-      headerSkipped = true;
-      continue;
+      inItemsSection = true; headerSkipped = true; continue;
     }
     if (line.toLowerCase().startsWith('payment method')) {
-      inItemsSection = false;
-      continue;
+      inItemsSection = false; continue;
     }
     if (!inItemsSection || !headerSkipped) continue;
 
@@ -211,15 +251,30 @@ function parseCSV(text) {
     const qty = parseFloat(line.substring(lastComma + 1).trim());
     if (!name || isNaN(qty)) continue;
 
-    const parsed = parseUnitToKg(name, qty);
+    const parsed = parseItem(name, qty);
     const key = parsed.canonical;
 
-    if (!items[key]) items[key] = { kg: 0, pieces: 0 };
-    if (parsed.kg !== null) items[key].kg += parsed.kg;
-    else items[key].pieces += parsed.pieces;
+    if (!items[key]) items[key] = { kg: 0, cartons: 0, pieces: 0 };
+    if (parsed.kg !== null)      items[key].kg      += parsed.kg;
+    if (parsed.cartons !== null) items[key].cartons += parsed.cartons;
+    if (parsed.pieces !== null)  items[key].pieces  += parsed.pieces;
   }
 
   return items;
+}
+
+function getDisplayValue(n, d) {
+  const lower = n.toLowerCase();
+  if (PIECE_ITEMS.includes(lower))     return `${d.pieces} pcs`;
+  if (PANLA_CT_ITEMS.includes(lower))  return `${d.cartons % 1 === 0 ? d.cartons : d.cartons.toFixed(3).replace(/\.?0+$/, '')} ct`;
+  return `${d.kg.toFixed(2)} kg`;
+}
+
+function isZeroRow(n, d) {
+  const lower = n.toLowerCase();
+  if (PIECE_ITEMS.includes(lower))    return d.pieces === 0;
+  if (PANLA_CT_ITEMS.includes(lower)) return d.cartons === 0;
+  return d.kg === 0;
 }
 
 function render(items) {
@@ -228,42 +283,33 @@ function render(items) {
   const summaryCards = document.getElementById('summary-cards');
   const table = document.getElementById('results-table');
 
-  const names = Object.keys(items).sort();
-  if (names.length === 0) {
-    errorArea.textContent = 'Could not find any item rows. Please check the file format.';
-    errorArea.style.display = 'block';
-    return;
-  }
   errorArea.style.display = 'none';
 
-  let totalKg = 0, totalPieces = 0, itemCount = 0;
-  names.forEach(n => {
-    if (items[n].kg > 0) { totalKg += items[n].kg; itemCount++; }
-    if (items[n].pieces > 0) { totalPieces += items[n].pieces; itemCount++; }
+  let totalKg = 0, totalPieces = 0, itemsSold = 0;
+  FIXED_ITEMS.forEach(n => {
+    const d = items[n] || { kg: 0, cartons: 0, pieces: 0 };
+    totalKg += d.kg;
+    totalPieces += d.pieces;
+    if (!isZeroRow(n, d)) itemsSold++;
   });
 
   summaryCards.innerHTML = `
     <div class="card"><p class="label">Total weight sold</p><p class="value">${totalKg.toFixed(2)} kg</p></div>
     <div class="card"><p class="label">Sausage (pieces)</p><p class="value">${totalPieces}</p></div>
-    <div class="card"><p class="label">Items sold</p><p class="value">${itemCount}</p></div>
+    <div class="card"><p class="label">Items sold</p><p class="value">${itemsSold}</p></div>
   `;
 
   let rows = '<tr><th>Item</th><th class="value">Total</th></tr>';
-  names.forEach(n => {
-    const d = items[n];
-    let valueStr = '';
-    if (d.kg > 0) valueStr = d.kg.toFixed(2) + ' kg';
-    if (d.pieces > 0) valueStr += (valueStr ? ' + ' : '') + d.pieces + ' pcs';
-    if (!valueStr) return;
-    rows += `<tr><td>${n}</td><td class="value">${valueStr}</td></tr>`;
+  FIXED_ITEMS.forEach(n => {
+    const d = items[n] || { kg: 0, cartons: 0, pieces: 0 };
+    const zero = isZeroRow(n, d);
+    rows += `<tr class="${zero ? 'zero' : ''}"><td>${n}</td><td class="value">${getDisplayValue(n, d)}</td></tr>`;
   });
-  table.innerHTML = rows;
 
+  table.innerHTML = rows;
   resultArea.style.display = 'block';
   document.getElementById('upload-area').style.display = 'none';
-
   window._lastItems = items;
-  window._lastNames = names;
 }
 
 function handleFile(file) {
@@ -299,16 +345,11 @@ document.getElementById('reset-btn').addEventListener('click', () => {
 });
 
 document.getElementById('copy-btn').addEventListener('click', () => {
-  const names = window._lastNames || [];
   const items = window._lastItems || {};
   let text = 'Item\tTotal\n';
-  names.forEach(n => {
-    const d = items[n];
-    let valueStr = '';
-    if (d.kg > 0) valueStr = d.kg.toFixed(2) + ' kg';
-    if (d.pieces > 0) valueStr += (valueStr ? ' + ' : '') + d.pieces + ' pcs';
-    if (!valueStr) return;
-    text += n + '\t' + valueStr + '\n';
+  FIXED_ITEMS.forEach(n => {
+    const d = items[n] || { kg: 0, cartons: 0, pieces: 0 };
+    text += `${n}\t${getDisplayValue(n, d)}\n`;
   });
   navigator.clipboard.writeText(text);
   const btn = document.getElementById('copy-btn');
@@ -316,26 +357,14 @@ document.getElementById('copy-btn').addEventListener('click', () => {
   btn.innerHTML = '✅ Copied!';
   setTimeout(() => { btn.innerHTML = original; }, 1500);
 });
-</script>
-</body>
-</html>
 
-<script>
 document.getElementById('export-btn').addEventListener('click', () => {
-  const names = window._lastNames || [];
   const items = window._lastItems || {};
-
-  // Build CSV content with a header row
-  let csv = 'Item,Total (kg),Pieces\n';
-  names.forEach(n => {
-    const d = items[n];
-    const kg = d.kg > 0 ? d.kg.toFixed(2) : '';
-    const pcs = d.pieces > 0 ? d.pieces : '';
-    if (!kg && !pcs) return;
-    csv += `"${n}",${kg},${pcs}\n`;
+  let csv = 'Item,Total\n';
+  FIXED_ITEMS.forEach(n => {
+    const d = items[n] || { kg: 0, cartons: 0, pieces: 0 };
+    csv += `"${n}",${getDisplayValue(n, d)}\n`;
   });
-
-  // Trigger download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -345,3 +374,5 @@ document.getElementById('export-btn').addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 </script>
+</body>
+</html>
